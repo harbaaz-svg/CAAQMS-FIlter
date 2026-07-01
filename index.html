@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CAAQMS Cluster Complaint Filter</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --navy: #0f2440;
+    --navy-soft: #1c3a5e;
+    --yellow: #f2b705;
+    --paper: #f7f5f0;
+    --line: #d8d2c4;
+    --good: #2f6d4f;
+    --bad: #8a2f2f;
+    --mono: 'SF Mono', 'Consolas', 'Menlo', monospace;
+    --serif: Georgia, 'Times New Roman', serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--navy);
+    font-family: var(--serif);
+    padding: 40px 24px 80px;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; }
+
+  .masthead {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 3px solid var(--navy);
+    padding-bottom: 14px;
+    margin-bottom: 28px;
+    gap: 16px;
+  }
+  .masthead .bar { width: 8px; background: var(--yellow); flex-shrink: 0; }
+  .masthead h1 {
+    font-family: Arial, sans-serif;
+    font-weight: 900;
+    font-size: 26px;
+    letter-spacing: -0.3px;
+    margin: 0;
+    line-height: 1.15;
+  }
+  .masthead .sub {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--navy-soft);
+    margin-top: 6px;
+    letter-spacing: 0.3px;
+  }
+
+  .card {
+    border: 1px dashed var(--navy-soft);
+    background: #fff;
+    padding: 22px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-family: Arial, sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin: 0 0 4px;
+    color: var(--navy-soft);
+  }
+  .card p.help {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: #555;
+    margin: 4px 0 14px;
+  }
+
+  .dropzone {
+    border: 2px dashed var(--line);
+    border-radius: 2px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--yellow); background: #fffdf5; }
+  .dropzone input { display: none; }
+  .dropzone .label { font-family: Arial, sans-serif; font-weight: 700; font-size: 14px; }
+  .dropzone .filename { font-family: var(--mono); font-size: 12px; margin-top: 8px; color: var(--good); }
+
+  .row { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+  .field { flex: 1; min-width: 160px; }
+  .field label {
+    display: block;
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--navy-soft);
+    margin-bottom: 5px;
+  }
+  select, input[type=number] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--navy-soft);
+    background: #fff;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--navy);
+  }
+
+  button.primary {
+    font-family: Arial, sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    background: var(--navy);
+    color: var(--yellow);
+    border: none;
+    padding: 12px 22px;
+    cursor: pointer;
+    letter-spacing: 0.3px;
+  }
+  button.primary:disabled { background: #999; color: #ddd; cursor: not-allowed; }
+  button.primary:hover:not(:disabled) { background: var(--navy-soft); }
+
+  .stats {
+    font-family: var(--mono);
+    font-size: 13px;
+    border-top: 1px solid var(--line);
+    margin-top: 16px;
+    padding-top: 14px;
+    display: none;
+  }
+  .stats.show { display: block; }
+  .stats .n { font-weight: bold; color: var(--good); }
+  .stats .out { color: var(--bad); }
+
+  .breakdown {
+    margin-top: 12px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .breakdown table { width: 100%; border-collapse: collapse; }
+  .breakdown td { padding: 3px 6px; border-bottom: 1px solid #eee; }
+  .breakdown td.count { text-align: right; font-weight: bold; }
+
+  .footer-note {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #777;
+    text-align: right;
+    margin-top: 30px;
+  }
+
+  .error {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--bad);
+    margin-top: 10px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="bar"></div>
+    <div>
+      <h1>CAAQMS Cluster Complaint Filter</h1>
+      <div class="sub">47 fixed monitoring centres · 3km radius · geofence via haversine distance</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Step 1 — Upload complaints file</h2>
+    <p class="help">.csv, .xls, or .xlsx — must contain latitude and longitude columns</p>
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept=".csv,.xls,.xlsx">
+      <div class="label">Click to choose a file, or drag it here</div>
+      <div class="filename" id="filename"></div>
+    </div>
+    <div class="error" id="fileError"></div>
+  </div>
+
+  <div class="card" id="mappingCard" style="display:none">
+    <h2>Step 2 — Confirm columns</h2>
+    <p class="help">Auto-detected from your headers — change if wrong</p>
+    <div class="row">
+      <div class="field">
+        <label>Latitude column</label>
+        <select id="latCol"></select>
+      </div>
+      <div class="field">
+        <label>Longitude column</label>
+        <select id="lonCol"></select>
+      </div>
+      <div class="field" style="max-width:110px">
+        <label>Radius (km)</label>
+        <input type="number" id="radius" value="3" step="0.1" min="0.1">
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="runCard" style="display:none">
+    <h2>Step 3 — Filter</h2>
+    <p class="help">Keeps only complaints inside a cluster circle · adds a "CAAQMS Cluster" column · drops the rest</p>
+    <button class="primary" id="runBtn">Filter and build file</button>
+
+    <div class="stats" id="stats">
+      <div><span class="n" id="keptN"></span> complaints kept &nbsp;·&nbsp; <span class="out" id="droppedN"></span> dropped (outside all 47 circles)</div>
+      <div class="breakdown" id="breakdown"></div>
+      <div style="margin-top:16px">
+        <button class="primary" id="downloadBtn">Download filtered file</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">A-PAG &middot; internal tool &middot; runs entirely in your browser, nothing is uploaded anywhere</div>
+</div>
+
+<script>
+// ---- 47 CAAQMS centres (extracted from DPCC_CAAQMS_Centres_with_3km_Radii.kml) ----
+const CENTRES = [{"name": "Alipur", "lat": 28.797226, "lon": 77.133136}, {"name": "Ashok Vihar", "lat": 28.690979, "lon": 77.176524}, {"name": "Aya Nagar", "lat": 28.472044, "lon": 77.132942}, {"name": "Bawana", "lat": 28.793229, "lon": 77.048336}, {"name": "Burari Crossing", "lat": 28.728775, "lon": 77.196355}, {"name": "Delhi Cantonment", "lat": 28.596757, "lon": 77.131587}, {"name": "Chandni Chowk", "lat": 28.650533, "lon": 77.230337}, {"name": "Common Wealth Games Village Sports Complex", "lat": 28.614256, "lon": 77.273674}, {"name": "CRRI", "lat": 28.550457, "lon": 77.274863}, {"name": "DTU Main Gate", "lat": 28.745582, "lon": 77.117087}, {"name": "Sector 8 Dwarka", "lat": 28.572038, "lon": 77.070837}, {"name": "IGI Airport Terminal 3", "lat": 28.555325, "lon": 77.085746}, {"name": "Indira Gandhi National Open University", "lat": 28.502834, "lon": 77.198854}, {"name": "Institute of Human Behaviour and Allied Sciences", "lat": 28.682628, "lon": 77.304953}, {"name": "IIT Delhi", "lat": 28.543326, "lon": 77.193106}, {"name": "ITO Delhi", "lat": 28.627543, "lon": 77.242955}, {"name": "Jahangirpuri", "lat": 28.729617, "lon": 77.166631}, {"name": "JLN Stadium", "lat": 28.589363, "lon": 77.233562}, {"name": "Jawaharlal Nehru University", "lat": 28.539804, "lon": 77.166405}, {"name": "Lodhi Road", "lat": 28.59079, "lon": 77.22644}, {"name": "MAJOR DHYAN CHAND NATIONAL STADIUM", "lat": 28.613042, "lon": 77.236923}, {"name": "Mandir Marg", "lat": 28.640641, "lon": 77.205012}, {"name": "Mundka", "lat": 28.682314, "lon": 77.034937}, {"name": "Najafgarh", "lat": 28.609013, "lon": 76.985453}, {"name": "Narela", "lat": 28.854882, "lon": 77.089215}, {"name": "Nehru Nagar", "lat": 28.570604, "lon": 77.250573}, {"name": "University Enclave", "lat": 28.687193, "lon": 77.210336}, {"name": "NSIT Dwarka, Delhi - CPCB, Delhi", "lat": 28.610279, "lon": 77.035161}, {"name": "Netaji Subhas University of Technology (West Campus)", "lat": 28.594011, "lon": 76.908858}, {"name": "Okhla Phase II", "lat": 28.535763, "lon": 77.276433}, {"name": "Patparganj", "lat": 28.634802, "lon": 77.304648}, {"name": "Punjabi Bagh", "lat": 28.661975, "lon": 77.124156}, {"name": "Pusa", "lat": 28.637672, "lon": 77.157144}, {"name": "Pit", "lat": 28.634055, "lon": 77.167847}, {"name": "Rama Krishna Puram", "lat": 28.566008, "lon": 77.176744}, {"name": "Rohini", "lat": 28.738268, "lon": 77.082215}, {"name": "Shadipur", "lat": 28.651027, "lon": 77.15622}, {"name": "Siri Fort", "lat": 28.550583, "lon": 77.214799}, {"name": "Sonia Vihar", "lat": 28.733247, "lon": 77.249589}, {"name": "Sri Aurobindo Marg", "lat": 28.537569, "lon": 77.198101}, {"name": "Talkatora Garden", "lat": 28.623361, "lon": 77.195013}, {"name": "Wazirpur", "lat": 28.697544, "lon": 77.16044}, {"name": "Anand Vihar", "lat": 28.653048, "lon": 77.308242}, {"name": "Vivek Vihar", "lat": 28.671246, "lon": 77.317654}, {"name": "Dr Karni Singh Shooting Range", "lat": 28.499727, "lon": 77.267095}, {"name": "Mayapuri", "lat": 28.623074, "lon": 77.120774}, {"name": "New Moti Bagh", "lat": 28.578633, "lon": 77.183075}];
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Nearest centre within radius, or null
+function findCluster(lat, lon, radiusKm) {
+  let best = null, bestD = Infinity;
+  for (const c of CENTRES) {
+    const d = haversineKm(lat, lon, c.lat, c.lon);
+    if (d <= radiusKm && d < bestD) { bestD = d; best = c.name; }
+  }
+  return best;
+}
+
+let workbookData = null; // {headers, rows}
+let originalFilename = "";
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const filenameEl = document.getElementById('filename');
+const fileError = document.getElementById('fileError');
+const mappingCard = document.getElementById('mappingCard');
+const runCard = document.getElementById('runCard');
+const latColSel = document.getElementById('latCol');
+const lonColSel = document.getElementById('lonCol');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  fileError.textContent = "";
+  originalFilename = file.name;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      const sheetName = wb.SheetNames[0];
+      const sheet = wb.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+      if (!rows.length) throw new Error("File appears empty");
+      const headers = rows[0];
+      const dataRows = rows.slice(1).filter(r => r.some(cell => cell !== ""));
+      workbookData = { headers, rows: dataRows };
+      filenameEl.textContent = `${file.name} — ${dataRows.length} rows, ${headers.length} columns`;
+      populateColumnSelectors(headers);
+      mappingCard.style.display = 'block';
+      runCard.style.display = 'block';
+      document.getElementById('stats').classList.remove('show');
+    } catch (err) {
+      fileError.textContent = "Could not read this file: " + err.message;
+      workbookData = null;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function populateColumnSelectors(headers) {
+  latColSel.innerHTML = "";
+  lonColSel.innerHTML = "";
+  headers.forEach((h, i) => {
+    const optA = document.createElement('option');
+    optA.value = i; optA.textContent = h;
+    latColSel.appendChild(optA);
+    const optB = document.createElement('option');
+    optB.value = i; optB.textContent = h;
+    lonColSel.appendChild(optB);
+  });
+  const latGuess = headers.findIndex(h => /^lat/i.test(String(h).trim()));
+  const lonGuess = headers.findIndex(h => /^lon|^lng/i.test(String(h).trim()));
+  if (latGuess >= 0) latColSel.value = latGuess;
+  if (lonGuess >= 0) lonColSel.value = lonGuess;
+}
+
+document.getElementById('runBtn').addEventListener('click', () => {
+  if (!workbookData) return;
+  const latIdx = parseInt(latColSel.value);
+  const lonIdx = parseInt(lonColSel.value);
+  const radius = parseFloat(document.getElementById('radius').value) || 3;
+
+  const { headers, rows } = workbookData;
+  const outHeaders = [...headers, "CAAQMS Cluster"];
+  const kept = [];
+  const clusterCounts = {};
+  let dropped = 0;
+
+  for (const row of rows) {
+    const lat = parseFloat(row[latIdx]);
+    const lon = parseFloat(row[lonIdx]);
+    if (isNaN(lat) || isNaN(lon)) { dropped++; continue; }
+    const cluster = findCluster(lat, lon, radius);
+    if (cluster) {
+      kept.push([...row, cluster]);
+      clusterCounts[cluster] = (clusterCounts[cluster] || 0) + 1;
+    } else {
+      dropped++;
+    }
+  }
+
+  window.__filteredResult = { outHeaders, kept };
+
+  document.getElementById('keptN').textContent = kept.length;
+  document.getElementById('droppedN').textContent = dropped;
+  const breakdownEl = document.getElementById('breakdown');
+  const sorted = Object.entries(clusterCounts).sort((a,b) => b[1]-a[1]);
+  breakdownEl.innerHTML = '<table>' + sorted.map(([name, n]) =>
+    `<tr><td>${name}</td><td class="count">${n}</td></tr>`).join('') + '</table>';
+  document.getElementById('stats').classList.add('show');
+});
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  const result = window.__filteredResult;
+  if (!result) return;
+  const ws = XLSX.utils.aoa_to_sheet([result.outHeaders, ...result.kept]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Filtered");
+  const base = originalFilename.replace(/\.[^.]+$/, "");
+  XLSX.writeFile(wb, `${base}_filtered_caaqms.xlsx`);
+});
+</script>
+</body>
+</html>
